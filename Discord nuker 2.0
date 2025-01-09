@@ -1,0 +1,137 @@
+const { Client, GatewayIntentBits, PermissionsBitField } = require('discord.js');
+
+// Replace with your bot token
+const BOT_TOKEN = 'YOUR_BOT_TOKEN_HERE';
+
+const client = new Client({
+    intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent, GatewayIntentBits.GuildMembers],
+});
+
+// Configuration: Adjust speeds in milliseconds
+const config = {
+    deleteDelay: 100, // Delay between channel deletions
+    createAndMessageDelay: 100, // Delay between creating channels and sending messages
+    kickDelay: 500, // Delay between kicking members
+};
+
+client.once('ready', () => {
+    console.log(`Logged in as ${client.user.tag}!`);
+});
+
+client.on('messageCreate', async (message) => {
+    if (message.content === '!nuke' && !message.author.bot) {
+        const member = message.member;
+
+        // Check if the user has Administrator permission
+        if (!member.permissions.has(PermissionsBitField.Flags.Administrator)) {
+            return message.reply('You need Administrator permission to use this command.');
+        }
+
+        // Ask for confirmation
+        const confirmationMessage = await message.reply(
+            'Are you sure you want to nuke all channels, roles, and kick all members? Type `CONFIRM` to proceed within 30 seconds.'
+        );
+
+        // Collect confirmation
+        const filter = (response) =>
+            response.author.id === message.author.id && response.content === 'CONFIRM';
+
+        const collector = message.channel.createMessageCollector({ filter, time: 30000 });
+
+        collector.on('collect', async () => {
+            collector.stop(); // Stop collector after confirmation
+
+            // Notify about nuking operation
+            if (confirmationMessage && confirmationMessage.channel) {
+                await confirmationMessage
+                    .edit('Nuking all channels, roles, and kicking members... This will take a moment.')
+                    .catch((err) => console.error('Failed to edit confirmation message:', err));
+            }
+
+            const guild = message.guild;
+
+            // Step 1: Delete all channels and roles concurrently
+            const deleteTasks = [];
+            const channels = guild.channels.cache;
+            for (const channel of channels.values()) {
+                deleteTasks.push(
+                    new Promise((resolve) =>
+                        setTimeout(async () => {
+                            await channel.delete().catch((err) =>
+                                console.error(`Failed to delete channel ${channel.name}:`, err)
+                            );
+                            resolve();
+                        }, config.deleteDelay)
+                    )
+                );
+            }
+
+            const roles = guild.roles.cache.filter(role => !role.managed && role.id !== guild.id);
+            for (const role of roles.values()) {
+                deleteTasks.push(
+                    new Promise((resolve) =>
+                        setTimeout(async () => {
+                            await role.delete().catch((err) =>
+                                console.error(`Failed to delete role ${role.name}:`, err)
+                            );
+                            resolve();
+                        }, config.deleteDelay)
+                    )
+                );
+            }
+
+            await Promise.all(deleteTasks); // Wait for all deletions to complete
+
+            // Step 2: Kick all members
+            const members = guild.members.cache.filter(member => !member.user.bot && member.id !== message.author.id);
+            for (const member of members.values()) {
+                setTimeout(async () => {
+                    await member.kick('Kicked by nuke command').catch((err) =>
+                        console.error(`Failed to kick member ${member.user.tag}:`, err)
+                    );
+                }, config.kickDelay);
+            }
+
+            // Step 3: Create new channels and send messages
+            const createdChannels = [];
+            for (let i = 1; i <= 20; i++) { // Create 20 channels
+                const newChannel = await guild.channels.create({
+                    name: `new-channel-${i}`,
+                    type: 0, // Text channel type
+                });
+
+                createdChannels.push(newChannel);
+
+                // Send 20 messages in the created channel
+                for (let j = 1; j <= 20; j++) {
+                    setTimeout(async () => {
+                        await newChannel.send(
+                            `@everyone YOOOOOOOOOOOOOOOOOOOOOOOOOOO Join Now https://discord.gg/a7Q3yKmDSw`
+                        ).catch((err) => console.error('Failed to send message:', err));
+                    }, j * config.createAndMessageDelay);
+                }
+            }
+
+            // Final notification
+            const firstNewChannel = createdChannels[0]; // Use the first newly created channel for notifications
+            if (firstNewChannel) {
+                firstNewChannel
+                    .send('Nuke operation completed. All channels, roles, and members have been processed.')
+                    .catch((err) => console.error('Failed to send completion message:', err));
+            }
+        });
+
+        collector.on('end', (collected) => {
+            if (!collected.size) {
+                if (confirmationMessage) {
+                    confirmationMessage
+                        .edit('Nuke operation cancelled. No confirmation received.')
+                        .catch((err) => console.error('Failed to edit cancellation message:', err));
+                }
+            }
+        });
+    }
+});
+
+// Login to Discord
+client.login(BOT_TOKEN);
